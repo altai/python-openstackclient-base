@@ -34,8 +34,8 @@ class ComputeClient(BaseClient):
     """
     service_type = "compute"
 
-    def __init__(self, client, extensions=None):
-        super(ComputeClient, self).__init__(client=client,
+    def __init__(self, http_client, extensions=None):
+        super(ComputeClient, self).__init__(http_client,
                                             extensions=extensions)
         
         self.flavors = flavors.FlavorManager(self)
@@ -70,8 +70,8 @@ class VolumeClient(BaseClient):
 
     service_type = "volume"
 
-    def __init__(self, client, extensions=None):
-        super(VolumeClient, self).__init__(client=client,
+    def __init__(self, http_client, extensions=None):
+        super(VolumeClient, self).__init__(http_client,
                                            extensions=extensions)
 
         self.volumes = volumes.VolumeManager(self)

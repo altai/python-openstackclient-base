@@ -29,10 +29,8 @@ BuildRequires:    python-setuptools
 BuildRequires:    python-sphinx make
 %endif
 
-Requires:         python-httplib2
-
 %description
-This is a client for the OpenStack openstack API.
+This is a common API client library.
 
 
 %if 0%{?enable_doc}
@@ -83,5 +81,5 @@ rm -rf %{buildroot}
 
 
 %changelog
-* Sun Jun 04 2012 Alessio Ababilov <aababilov@griddynamics.com> - 2.7
+* Thu Jun 19 2012 Alessio Ababilov <aababilov@griddynamics.com> - 2012.1
 - Initial release: spec created

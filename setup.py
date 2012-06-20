@@ -24,6 +24,7 @@ import setuptools
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
+
 setuptools.setup(
     name="python-openstackclient-base",
     version="0.1",

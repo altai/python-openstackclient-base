@@ -23,7 +23,8 @@ Quickstart
 
 ::
 
-    from openstackclient_base import patch_clients
+    from openstackclient_base.base import monkey_patch
+    monkey_patch()
     from openstackclient_base.client import HttpClient
     http_client = HttpClient(username="...", password="...", tenant_name="...", auth_uri="...")
 
@@ -45,8 +46,8 @@ The openstack-base library contains two main classes:
   underlying HttpClient (class composition).
 
 Several clients are implemented. They should be moved to actual packages (novaclient, 
-keystoneclient etc.). Import of patch_clients is necessary until different clients
-will switch to one common base library.
+keystoneclient etc.). Monkey patch is not necessary, but recommended. It switches 
+different clients one common base library.
 
 - ComputeClient, VolumeClient - compute and volume clients for nova;
 - v1.ImageClient, v2.ImageClient - clients for glance;
@@ -57,7 +58,6 @@ A sample class ClientSet can be used for convenience. It should be created only 
 
 ::
 
-    from openstackclient_base import patch_clients
     from openstackclient_base.client_set import ClientSet
     cs = ClientSet(username="...", password="...", tenant_name="...", auth_uri="...")
 

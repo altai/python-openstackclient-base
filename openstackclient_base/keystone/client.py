@@ -33,9 +33,9 @@ class IdentityAdminClient(BaseClient):
     service_type = "identity"
     endpoint_type = "adminURL"
 
-    def __init__(self, client, **kwargs):
+    def __init__(self, http_client, **kwargs):
         """ Initialize a new client for the Keystone v2.0 API. """
-        super(IdentityAdminClient, self).__init__(client=client)
+        super(IdentityAdminClient, self).__init__(http_client)
 
         self.endpoints = endpoints.EndpointManager(self)
         self.roles = roles.RoleManager(self)
@@ -55,8 +55,8 @@ class IdentityPublicClient(BaseClient):
     service_type = "identity"
     endpoint_type = "publicURL"
 
-    def __init__(self, client, **kwargs):
+    def __init__(self, http_client, **kwargs):
         """ Initialize a new client for the Keystone v2.0 API. """
-        super(IdentityPublicClient, self).__init__(client=client)
+        super(IdentityPublicClient, self).__init__(http_client)
 
         self.tenants = tenants.TenantManager(self)

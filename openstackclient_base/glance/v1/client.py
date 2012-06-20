@@ -27,9 +27,9 @@ class ImageClient(BaseClient):
 
     service_type = "image"
     
-    def __init__(self, client):
+    def __init__(self, http_client):
         """ Initialize a new client for the Images v1 API. """
-        super(ImageClient, self).__init__(client=client)
+        super(ImageClient, self).__init__(http_client)
 
         self.images = images.ImageManager(self)
         self.image_members = image_members.ImageMemberManager(self)

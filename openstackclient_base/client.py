@@ -9,17 +9,24 @@
 OpenStack Client interface. Handles the REST calls and responses.
 """
 
+
+import errno
 import logging
 import re
 import os
-import urlparse
 
-import httplib2
+import httplib
+import urlparse
 
 try:
     import json
 except ImportError:
     import simplejson as json
+
+try:
+    import sendfile
+except ImportError:
+    sendfile = None
 
 # Python 2.5 compat fix
 if not hasattr(urlparse, "parse_qsl"):
@@ -31,9 +38,108 @@ from openstackclient_base import exceptions
 
 
 LOG = logging.getLogger(__name__)
+CHUNKSIZE = 65536
+VERSION_REGEX = re.compile(r"v\d+\.?\d*")
 
 
-class HttpClient(httplib2.Http):
+def seekable(body):
+    # pipes are not seekable, avoids sendfile() failure on e.g.
+    #   cat /path/to/image | glance add ...
+    # or where add command is launched via popen
+    try:
+        os.lseek(body.fileno(), 0, os.SEEK_SET)
+        return True
+    except OSError as e:
+        return (e.errno != errno.ESPIPE)
+
+
+def sendable(body):
+    return (sendfile is not None and
+            hasattr(body, "fileno") and
+            seekable(body))
+
+
+def body_iterator(connection, body):
+    if sendable(body) and isinstance(connection, httplib.HTTPConnection):
+        return SendFileIterator(connection, body)
+    elif hasattr(body, "read"):
+        return FileReaderIterator(body)
+    elif isinstance(body, collections.Iterable):
+        return body
+    else:
+        return None
+
+
+class FileReaderIterator(object):
+
+    """
+    A class that acts as an iterator over an image file's
+    chunks of data.
+    """
+
+    def __init__(self, source):
+        """
+        Constructs the object from a readable image source
+        (such as an HTTPResponse or file-like object)
+        """
+        self.source = source
+
+    def __iter__(self):
+        """
+        Exposes an iterator over the chunks of data in the
+        image file.
+        """
+        while True:
+            chunk = self.source.read(CHUNKSIZE)
+            if chunk:
+                yield chunk
+            else:
+                break
+
+
+class SendFileIterator(object):
+    """
+    Emulate iterator pattern over sendfile, in order to allow
+    send progress be followed by wrapping the iteration.
+    """
+    def __init__(self, connection, body):
+        self.connection = connection
+        self.body = body
+        self.offset = 0
+        self.sending = True
+
+    def __iter__(self):
+        class OfLength:
+            def __init__(self, len):
+                self.len = len
+
+            def __len__(self):
+                return self.len
+
+        while self.sending:
+            try:
+                sent = sendfile.sendfile(self.connection.sock.fileno(),
+                                         self.body.fileno(),
+                                         self.offset,
+                                         CHUNKSIZE)
+            except OSError as e:
+                # suprisingly, sendfile may fail transiently instead of
+                # blocking, in which case we select on the socket in order
+                # to wait on its return to a writeable state before resuming
+                # the send loop
+                if e.errno in (errno.EAGAIN, errno.EBUSY):
+                    wlist = [self.connection.sock.fileno()]
+                    rfds, wfds, efds = select.select([], wlist, [])
+                    if wfds:
+                        continue
+                raise
+
+            self.sending = (sent != 0)
+            self.offset += sent
+            yield OfLength(sent)
+
+
+class HttpClient(object):
 
     USER_AGENT = "python-openstackclient-base"
 
@@ -41,21 +147,18 @@ class HttpClient(httplib2.Http):
                  password=None, auth_url=None, auth_uri=None,
                  endpoint=None, token=None, region_name=None,
                  timeout=None):
-        super(HttpClient, self).__init__(timeout=timeout)
+        self.connect_kwargs = {} if timeout is None else {"timeout": timeout}
+
         self.username = username
         self.tenant_id = tenant_id
         self.tenant_name = tenant_name
         self.password = password
-        auth_uri = auth_uri or auth_url
-        self.auth_uri = auth_uri.rstrip("/") if auth_uri else None
+        self.auth_uri = auth_uri or auth_url
         self.token = token
         self.endpoint = endpoint
         self.region_name = region_name
 
         self.access = None
-
-        # httplib2 overrides
-        self.force_exception_to_status_code = True
 
     def url_for(self, endpoint_type, service_type, region_name=None):
         """Fetch an endpoint from the service catalog.
@@ -121,79 +224,130 @@ class HttpClient(httplib2.Http):
         try:
             self.access = body["access"]
         except ValueError:
-            LOG.error("expected `access` key in keystone response")
+            LOG.error("expected `access' key in keystone response")
             raise
 
-    def http_log(self, args, kwargs, resp, body):
+    def http_log(self, uri, method, headers, body, resp, resp_body):
         if not LOG.isEnabledFor(logging.DEBUG):
             return
 
-        string_parts = ["curl -i"]
-        for element in args:
-            if element in ("GET", "POST"):
-                string_parts.append(" -X %s" % element)
-            else:
-                string_parts.append(" %s" % element)
+        string_parts = ["curl -i -X '%s' '%s'" % (method, uri)]
 
-        for element in kwargs["headers"]:
-            header = " -H \"%s: %s\"" % (element, kwargs["headers"][element])
-            string_parts.append(header)
-
+        for key, value in headers.iteritems():
+            string_parts.append(" -H '%s: %s'" % (key, value))
+        if isinstance(body, basestring):
+            string_parts.append(" -d '%s'" % body)
         LOG.debug("REQ: %s\n" % "".join(string_parts))
-        if "body" in kwargs:
-            LOG.debug("REQ BODY: %s\n" % (kwargs["body"]))
-        LOG.debug("RESP: %s\nRESP BODY: %s\n", resp, body)
+        if resp:
+            LOG.debug("RESP: %s\n" % resp.status)
+        if resp_body:
+            LOG.debug("RESP BODY: %s\n" % resp_body)
 
-    def request(self, url, method, **kwargs):
-        """ Send an http request with the specified characteristics.
+    def request(self, uri, method, **kwargs):
+        parsed = urlparse.urlsplit(uri)
+        if not parsed.netloc:
+            parsed = urlparse.urlparse("http://%s" % url)
+        use_ssl = parsed.scheme == "https"
+        connection_class = (httplib.HTTPSConnection
+                            if use_ssl
+                            else httplib.HTTPConnection)
+        c = connection_class(parsed.netloc, **self.connect_kwargs)
+        request_uri = ("?".join([parsed.path, parsed.query])
+                       if parsed.query
+                       else parsed.path)
 
-        Wrapper around httplib2.Http.request to handle tasks such as
-        setting headers, JSON encoding/decoding, and error handling.
-        """
-        # Copy the kwargs so we can reuse the original in case of redirects
-        request_kwargs = kwargs.copy()
-        request_kwargs.setdefault("headers", kwargs.get("headers", {}))
-        request_kwargs["headers"]["User-Agent"] = self.USER_AGENT
-        if "body" in kwargs:
-            request_kwargs["headers"]["Content-Type"] = "application/json"
-            request_kwargs["body"] = json.dumps(kwargs["body"])
+        headers = kwargs.get("headers", {})
+        headers["User-Agent"] = self.USER_AGENT
+        body = kwargs.get("body", None)
+        if isinstance(body, (dict, list)):
+            headers["Content-Type"] = "application/json"
+            body = json.dumps(body)
+        elif body is not None:
+            headers["Content-Type"] = "application/octet-stream"
 
-        resp, body = super(HttpClient, self).request(
-            url, method, **request_kwargs)
+        def _pushing(method):
+            return method.lower() in ("post", "put")
 
-        self.http_log((url, method,), request_kwargs, resp, body)
+        def _simple(body):
+            return body is None or isinstance(body, basestring)
 
-        if body:
-            try:
-                body = json.loads(body)
-            except ValueError:
-                LOG.debug("Could not decode JSON from body: %s" % body)
+        def _filelike(body):
+            return hasattr(body, "read")
+
+        def _sendbody(connection, iter):
+            connection.endheaders()
+            for sent in iter:
+                # iterator has done the heavy lifting
+                pass
+
+        def _chunkbody(connection, iter):
+            connection.putheader("Transfer-Encoding", "chunked")
+            connection.endheaders()
+            for chunk in iter:
+                connection.send("%x\r\n%s\r\n" % (len(chunk), chunk))
+            connection.send("0\r\n\r\n")
+
+        # Do a simple request or a chunked request, depending
+        # on whether the body param is file-like or iterable and
+        # the method is PUT or POST
+        #
+        if not _pushing(method) or _simple(body):
+            # Simple request...
+            c.request(method, request_uri, body, headers)
         else:
-            LOG.debug("No body was returned.")
-            body = None
+            iter = body_iterator(c, body)
+            if iter is None:
+                raise TypeError("Unsupported body type: %s" % body.__class__)
 
-        if resp.status in (400, 401, 403, 404, 408, 409, 413, 500, 501):
-            LOG.exception("Request returned failure status.")
-            raise exceptions.from_response(resp, body)
-        elif resp.status in (301, 302, 305):
-            # Redirected. Reissue the request to the new location.
+            c.putrequest(method, request_uri)
+            use_sendfile = isinstance(iter, SendFileIterator)
+
+            # According to HTTP/1.1, Content-Length and Transfer-Encoding
+            # conflict.
+            for header, value in headers.iteritems():
+                if use_sendfile or header.lower() != "content-length":
+                    c.putheader(header, value)
+
+            if use_sendfile:
+                # send actual file without copying into userspace
+                _sendbody(c, iter)
+            else:
+                # otherwise iterate and chunk
+                _chunkbody(c, iter)
+
+        resp = c.getresponse()
+        status_class = resp.status / 100
+        if status_class != 2 or kwargs.get("read_body", True):
+            resp_body = resp.read()
+        else:
+            resp_body = None
+
+        self.http_log(uri, method, headers, body, resp, resp_body)
+        try:
+            if resp_body:
+                resp_body = json.loads(resp_body)
+        except (TypeError, ValueError):
+            pass
+
+        if status_class == 3 and not _pushing(method):
             return self.request(resp["location"], method, **kwargs)
+        if status_class in (4, 5):
+            LOG.exception("Request returned failure status.")
+            raise exceptions.from_response(resp, resp_body)
 
-        return resp, body
-
-    version_re = re.compile(r"v\d+\.?\d*")
+        return (resp, resp_body)
 
     @staticmethod
     def concat_url(endpoint, url):
         version = None
         endpoint = endpoint.rstrip("/")
         spl = endpoint.rsplit("/", 1)
-        if HttpClient.version_re.match(spl[1]):
+        if VERSION_REGEX.match(spl[1]):
             endpoint = spl[0]
             version = spl[1]
         url = url.strip("/")
         spl = url.split("/", 1)
-        if HttpClient.version_re.match(spl[0]):
+        if VERSION_REGEX.match(spl[0]):
             version = spl[0]
             url = spl[1]
         if version:
@@ -201,9 +355,7 @@ class HttpClient(httplib2.Http):
         else:
             return "%s/%s" % (endpoint, url)
 
-    def _cs_request(self,
-                    client,
-                    url, method, **kwargs):
+    def cs_request(self, client, url, method, **kwargs):
         if self.endpoint:
             endpoint = self.endpoint
             token = self.token
@@ -249,8 +401,10 @@ class BaseClient(object):
     endpoint_type = "publicURL"
     endpoint = None
 
-    def __init__(self, client, extensions=None):
-        self.client = client
+    def __init__(self, http_client, extensions=None):
+        self.http_client = http_client
+        # a temporary fix for novaclient if monkey_patch is not applied
+        self.client = self
 
         # Add in any extensions...
         if extensions:
@@ -259,18 +413,21 @@ class BaseClient(object):
                     setattr(self, extension.name,
                             extension.manager_class(self))
 
-    def _cs_request(self, url, method, **kwargs):
-        return self.client._cs_request(
+    def cs_request(self, url, method, **kwargs):
+        return self.http_client.cs_request(
             self, url, method, **kwargs)
 
+    def head(self, url, **kwargs):
+        return self.cs_request(url, "HEAD", **kwargs)
+
     def get(self, url, **kwargs):
-        return self._cs_request(url, "GET", **kwargs)
+        return self.cs_request(url, "GET", **kwargs)
 
     def post(self, url, **kwargs):
-        return self._cs_request(url, "POST", **kwargs)
+        return self.cs_request(url, "POST", **kwargs)
 
     def put(self, url, **kwargs):
-        return self._cs_request(url, "PUT", **kwargs)
+        return self.cs_request(url, "PUT", **kwargs)
 
     def delete(self, url, **kwargs):
-        return self._cs_request(url, "DELETE", **kwargs)
+        return self.cs_request(url, "DELETE", **kwargs)
