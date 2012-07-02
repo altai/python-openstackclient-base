@@ -20,12 +20,12 @@ class ClientSet(object):
 
     def __init__(self, **kwargs):
         try:
-            self.client = kwargs["client"]
+            self.http_client = kwargs["http_client"]
         except KeyError:
-            self.client = HttpClient(**kwargs)
+            self.http_client = HttpClient(**kwargs)
 
     @property
-    def keystone(self):        
+    def keystone(self):
         return self.identity_admin
 
     @property
@@ -39,29 +39,29 @@ class ClientSet(object):
     @property
     def identity_admin(self):
         from openstackclient_base.keystone.client import IdentityAdminClient
-        return IdentityAdminClient(self.client)
+        return IdentityAdminClient(self.http_client)
 
     @property
     def identity_public(self):
         from openstackclient_base.keystone.client import IdentityPublicClient
-        return IdentityPublicClient(self.client)
+        return IdentityPublicClient(self.http_client)
 
     @property
     def compute(self):
         from openstackclient_base.nova.client import ComputeClient
-        return ComputeClient(self.client)
+        return ComputeClient(self.http_client)
 
     @property
     def volume(self):
         from openstackclient_base.nova.client import VolumeClient
-        return VolumeClient(self.client)
+        return VolumeClient(self.http_client)
 
     @property
     def image(self):
         from openstackclient_base.glance.v1.client import ImageClient
-        return ImageClient(self.client)
+        return ImageClient(self.http_client)
 
     @property
     def billing(self):
         from openstackclient_base.billing.client import BillingClient
-        return BillingClient(self.client)
+        return BillingClient(self.http_client)

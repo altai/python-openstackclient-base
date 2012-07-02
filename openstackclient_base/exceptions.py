@@ -4,27 +4,37 @@
 Exception definitions.
 """
 
-
-class CommandError(Exception):
+class ClientException(Exception):
+    """
+    The base exception class for all exceptions this library raises.
+    """
     pass
 
 
-class AuthorizationFailure(Exception):
+class CommandError(ClientException):
     pass
 
 
-class NoTokenLookupException(Exception):
+class AuthorizationFailure(ClientException):
+    pass
+
+
+class NoTokenLookupException(ClientException):
     """This form of authentication does not support looking up
        endpoints from an existing token."""
     pass
 
 
-class EndpointNotFound(Exception):
+class EndpointNotFound(ClientException):
     """Could not find Service or Region in Service Catalog."""
     pass
 
 
-class ClientException(Exception):
+class ClientConnectionError(ClientException):
+    pass
+
+
+class HttpException(ClientException):
     """
     The base exception class for all exceptions this library raises.
     """
@@ -37,7 +47,7 @@ class ClientException(Exception):
         return "%s (HTTP %s)" % (self.message, self.code)
 
 
-class BadRequest(ClientException):
+class BadRequest(HttpException):
     """
     HTTP 400 - Bad request: you sent some malformed data.
     """
@@ -45,7 +55,7 @@ class BadRequest(ClientException):
     message = "Bad request"
 
 
-class Unauthorized(ClientException):
+class Unauthorized(HttpException):
     """
     HTTP 401 - Unauthorized: bad credentials.
     """
@@ -53,7 +63,7 @@ class Unauthorized(ClientException):
     message = "Unauthorized"
 
 
-class Forbidden(ClientException):
+class Forbidden(HttpException):
     """
     HTTP 403 - Forbidden: your credentials don't give you access to this
     resource.
@@ -62,7 +72,7 @@ class Forbidden(ClientException):
     message = "Forbidden"
 
 
-class NotFound(ClientException):
+class NotFound(HttpException):
     """
     HTTP 404 - Not found
     """
@@ -70,7 +80,7 @@ class NotFound(ClientException):
     message = "Not found"
 
 
-class Conflict(ClientException):
+class Conflict(HttpException):
     """
     HTTP 409 - Conflict
     """
@@ -78,7 +88,7 @@ class Conflict(ClientException):
     message = "Conflict"
 
 
-class OverLimit(ClientException):
+class OverLimit(HttpException):
     """
     HTTP 413 - Over limit: you're over the API limits for this time period.
     """
@@ -87,7 +97,7 @@ class OverLimit(ClientException):
 
 
 # NotImplemented is a python keyword.
-class HTTPNotImplemented(ClientException):
+class HTTPNotImplemented(HttpException):
     """
     HTTP 501 - Not Implemented: the server does not support this operation.
     """
@@ -98,7 +108,7 @@ class HTTPNotImplemented(ClientException):
 # In Python 2.4 Exception is old-style and thus doesn't have a __subclasses__()
 # so we can do this:
 #     _code_map = dict((c.http_status, c)
-#                      for c in ClientException.__subclasses__())
+#                      for c in HttpException.__subclasses__())
 #
 # Instead, we have to hardcode it:
 _code_map = dict((c.http_status, c) for c in [BadRequest,
@@ -111,7 +121,7 @@ _code_map = dict((c.http_status, c) for c in [BadRequest,
 
 def from_response(response, body):
     """
-    Return an instance of an ClientException or subclass
+    Return an instance of an HttpException or subclass
     based on an httplib2 response.
 
     Usage::
@@ -120,7 +130,7 @@ def from_response(response, body):
         if resp.status != 200:
             raise exception_from_response(resp, body)
     """
-    cls = _code_map.get(response.status, ClientException)
+    cls = _code_map.get(response.status, HttpException)
     if body:
         if hasattr(body, 'keys'):
             error = body[body.keys()[0]]

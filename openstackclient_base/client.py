@@ -139,6 +139,49 @@ class SendFileIterator(object):
             yield OfLength(sent)
 
 
+class HTTPSClientAuthConnection(httplib.HTTPSConnection):
+    """
+    Class to make a HTTPS connection, with support for
+    full client-based SSL Authentication
+
+    :see http://code.activestate.com/recipes/
+            577548-https-httplib-client-connection-with-certificate-v/
+    """
+
+    def __init__(self, host, port, key_file, cert_file,
+                 ca_file, timeout=None, insecure=False):
+        httplib.HTTPSConnection.__init__(self, host, port, key_file=key_file,
+                                         cert_file=cert_file)
+        self.key_file = key_file
+        self.cert_file = cert_file
+        self.ca_file = ca_file
+        self.timeout = timeout
+        self.insecure = insecure
+
+    def connect(self):
+        """
+        Connect to a host on a given (SSL) port.
+        If ca_file is pointing somewhere, use it to check Server Certificate.
+
+        Redefined/copied and extended from httplib.py:1105 (Python 2.6.x).
+        This is needed to pass cert_reqs=ssl.CERT_REQUIRED as parameter to
+        ssl.wrap_socket(), which forces SSL to check server certificate against
+        our client certificate.
+        """
+        sock = socket.create_connection((self.host, self.port), self.timeout)
+        if self._tunnel_host:
+            self.sock = sock
+            self._tunnel()
+        # Check CA file unless 'insecure' is specificed
+        if self.insecure is True:
+            self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file,
+                                        cert_reqs=ssl.CERT_NONE)
+        else:
+            self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file,
+                                        ca_certs=self.ca_file,
+                                        cert_reqs=ssl.CERT_REQUIRED)
+
+
 class HttpClient(object):
 
     USER_AGENT = "python-openstackclient-base"
@@ -146,9 +189,10 @@ class HttpClient(object):
     def __init__(self, username=None, tenant_id=None, tenant_name=None,
                  password=None, auth_url=None, auth_uri=None,
                  endpoint=None, token=None, region_name=None,
+                 access=None,
+                 use_ssl=False, insecure=False,
+                 key_file=None, cert_file=None, ca_file=None,
                  timeout=None):
-        self.connect_kwargs = {} if timeout is None else {"timeout": timeout}
-
         self.username = username
         self.tenant_id = tenant_id
         self.tenant_name = tenant_name
@@ -157,8 +201,25 @@ class HttpClient(object):
         self.token = token
         self.endpoint = endpoint
         self.region_name = region_name
+        self.access = access
 
-        self.access = None
+        connect_kwargs = {} if timeout is None else {"timeout": timeout}
+
+        self.use_ssl = use_ssl
+        if use_ssl:
+            if (cert_file is not None) != (key_file is None):
+                raise ValueError("cert_file and key_file"
+                    "should be both None or not None")
+
+            for filename in key_file, cert_file, ca_file:
+                if (filename is not None and
+                    not os.path.exists(filename)):
+                    msg = "File %s does not exist" % filename
+                    raise exceptions.ClientConnectionError(msg)
+            for arg in "key_file", "cert_file", "ca_file", "insecure":
+                connect_kwargs[arg] = locals()[arg]
+
+        self.connect_kwargs = connect_kwargs
 
     def url_for(self, endpoint_type, service_type, region_name=None):
         """Fetch an endpoint from the service catalog.
