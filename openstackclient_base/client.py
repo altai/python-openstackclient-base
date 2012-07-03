@@ -352,38 +352,41 @@ class HttpClient(object):
         # on whether the body param is file-like or iterable and
         # the method is PUT or POST
         #
-        if not _pushing(method) or _simple(body):
-            # Simple request...
-            c.request(method, request_uri, body, headers)
-        else:
-            iter = body_iterator(c, body)
-            if iter is None:
-                raise TypeError("Unsupported body type: %s" % body.__class__)
-
-            c.putrequest(method, request_uri)
-            use_sendfile = isinstance(iter, SendFileIterator)
-
-            # According to HTTP/1.1, Content-Length and Transfer-Encoding
-            # conflict.
-            for header, value in headers.iteritems():
-                if use_sendfile or header.lower() != "content-length":
-                    c.putheader(header, value)
-
-            if use_sendfile:
-                # send actual file without copying into userspace
-                _sendbody(c, iter)
+        try:
+            resp, resp_body = None, None
+            if not _pushing(method) or _simple(body):
+                # Simple request...
+                c.request(method, request_uri, body, headers)
             else:
-                # otherwise iterate and chunk
-                _chunkbody(c, iter)
+                iter = body_iterator(c, body)
+                if iter is None:
+                    raise TypeError("Unsupported body type: %s" % body.__class__)
 
-        resp = c.getresponse()
-        status_class = resp.status / 100
-        if status_class != 2 or kwargs.get("read_body", True):
-            resp_body = resp.read()
-        else:
-            resp_body = None
+                c.putrequest(method, request_uri)
+                use_sendfile = isinstance(iter, SendFileIterator)
 
-        self.http_log(uri, method, headers, body, resp, resp_body)
+                # According to HTTP/1.1, Content-Length and Transfer-Encoding
+                # conflict.
+                for header, value in headers.iteritems():
+                    if use_sendfile or header.lower() != "content-length":
+                        c.putheader(header, value)
+
+                if use_sendfile:
+                    # send actual file without copying into userspace
+                    _sendbody(c, iter)
+                else:
+                    # otherwise iterate and chunk
+                    _chunkbody(c, iter)
+
+            resp = c.getresponse()
+            status_class = resp.status / 100
+            if status_class != 2 or kwargs.get("read_body", True):
+                resp_body = resp.read()
+            else:
+                resp_body = None
+        finally:
+            self.http_log(uri, method, headers, body, resp, resp_body)
+
         try:
             if resp_body:
                 resp_body = json.loads(resp_body)
