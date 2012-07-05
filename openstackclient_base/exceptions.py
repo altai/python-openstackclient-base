@@ -4,6 +4,7 @@
 Exception definitions.
 """
 
+
 class ClientException(Exception):
     """
     The base exception class for all exceptions this library raises.
@@ -132,14 +133,14 @@ def from_response(response, body):
     """
     cls = _code_map.get(response.status, HttpException)
     if body:
-        if hasattr(body, 'keys'):
-            error = body[body.keys()[0]]
-            message = error.get('message', None)
-            details = error.get('details', None)
+        if isinstance(body, dict):
+            error = body.itervalues().next() if body else {}
+            if not isinstance(error, dict):
+                error = body
+            message = error.get("message", None)
+            details = error.get("details", None)
         else:
-            # If we didn't get back a properly formed error message we
-            # probably couldn't communicate with Keystone at all.
-            message = "Unable to communicate with identity service: %s." % body
+            message = "Unable to communicate with server: %s." % body
             details = None
         return cls(code=response.status, message=message, details=details)
     else:

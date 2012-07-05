@@ -17,6 +17,8 @@ import os
 
 import httplib
 import urlparse
+import urllib
+
 
 try:
     import json
@@ -209,11 +211,10 @@ class HttpClient(object):
         if use_ssl:
             if (cert_file is not None) != (key_file is None):
                 raise ValueError("cert_file and key_file"
-                    "should be both None or not None")
+                                 "should be both None or not None")
 
             for filename in key_file, cert_file, ca_file:
-                if (filename is not None and
-                    not os.path.exists(filename)):
+                if (filename is not None and not os.path.exists(filename)):
                     msg = "File %s does not exist" % filename
                     raise exceptions.ClientConnectionError(msg)
             for arg in "key_file", "cert_file", "ca_file", "insecure":
@@ -270,9 +271,14 @@ class HttpClient(object):
         if self.token:
             params = {"auth": {"token": {"id": self.token}}}
         elif self.username and self.password:
-            params = {"auth": {"passwordCredentials":
-                                   {"username": self.username,
-                                    "password": self.password}}}
+            params = {
+                "auth": {
+                    "passwordCredentials": {
+                        "username": self.username,
+                        "password": self.password,
+                    }
+                }
+            }
         else:
             raise ValueError("A username and password or token is required.")
         if self.tenant_id:
@@ -305,6 +311,11 @@ class HttpClient(object):
             LOG.debug("RESP BODY: %s\n" % resp_body)
 
     def request(self, uri, method, **kwargs):
+        params = kwargs.get("params", None)
+        if params:
+            uri = "?".join(
+                (uri, urllib.urlencode(params)))
+
         parsed = urlparse.urlsplit(uri)
         if not parsed.netloc:
             parsed = urlparse.urlparse("http://%s" % url)
@@ -360,7 +371,8 @@ class HttpClient(object):
             else:
                 iter = body_iterator(c, body)
                 if iter is None:
-                    raise TypeError("Unsupported body type: %s" % body.__class__)
+                    raise TypeError(
+                        "Unsupported body type: %s" % body.__class__)
 
                 c.putrequest(method, request_uri)
                 use_sendfile = isinstance(iter, SendFileIterator)
