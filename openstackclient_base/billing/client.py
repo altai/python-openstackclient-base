@@ -11,8 +11,8 @@ class Manager(object):
                       "PUT": "update", "DELETE": "delete"}
         for method in method_list:
             setattr(self, method_map[method],
-                lambda obj=self, _method=method, **kwargs:
-                    obj.cs_request(_method, **kwargs))
+                lambda body=None, _obj=self, _method=method, **kwargs:
+                    _obj.cs_request(_method, body, **kwargs))
 
     def cs_request(self, method, body=None, **kwargs):
         query = ["%s=%s" % (key, value)
