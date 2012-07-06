@@ -408,7 +408,7 @@ class HttpClient(object):
         if status_class == 3 and not _pushing(method):
             return self.request(resp["location"], method, **kwargs)
         if status_class in (4, 5):
-            LOG.exception("Request returned failure status.")
+            LOG.error("Request returned failure status.")
             raise exceptions.from_response(resp, resp_body)
 
         return (resp, resp_body)

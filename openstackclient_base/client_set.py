@@ -49,7 +49,8 @@ class ClientSet(object):
     @property
     def compute(self):
         from openstackclient_base.nova.client import ComputeClient
-        return ComputeClient(self.http_client)
+        from openstackclient_base.nova import networks
+        return ComputeClient(self.http_client, extensions=[networks])
 
     @property
     def volume(self):
