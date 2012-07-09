@@ -1,5 +1,6 @@
 import logging
 import uuid
+import unittest
 import sys
 
 from openstackclient_base.base import monkey_patch
@@ -65,5 +66,16 @@ def main():
         test_glance(sys.argv[6])
 
 
+class NeoTests(unittest.TestCase):
+    def test_empty_url(self):
+        import socket
+        from openstackclient_base.client import HttpClient
+        c = HttpClient()
+        self.assertRaises(socket.gaierror, lambda: c.request('', '/users'))
+
+
 if __name__ == "__main__":
     main()
+    # unittest.main()
+    # NOTE(apugachev) we can not jsut use unittest.main here.
+    # Use "python -m unittest discover" instead.

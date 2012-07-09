@@ -318,7 +318,7 @@ class HttpClient(object):
 
         parsed = urlparse.urlsplit(uri)
         if not parsed.netloc:
-            parsed = urlparse.urlparse("http://%s" % url)
+            parsed = urlparse.urlparse("http://%s" % uri)
         use_ssl = parsed.scheme == "https"
         connection_class = (httplib.HTTPSConnection
                             if use_ssl
