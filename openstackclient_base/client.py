@@ -192,6 +192,7 @@ class HttpClient(object):
                  password=None, auth_url=None, auth_uri=None,
                  endpoint=None, token=None, region_name=None,
                  access=None,
+                 callback=None,
                  use_ssl=False, insecure=False,
                  key_file=None, cert_file=None, ca_file=None,
                  timeout=None):
@@ -204,6 +205,7 @@ class HttpClient(object):
         self.endpoint = endpoint
         self.region_name = region_name
         self.access = access
+        self.callback = callback
 
         connect_kwargs = {} if timeout is None else {"timeout": timeout}
 
@@ -350,13 +352,16 @@ class HttpClient(object):
             connection.endheaders()
             for sent in iter:
                 # iterator has done the heavy lifting
-                pass
+                if self.callback:
+                    self.callback(len(sent))
 
         def _chunkbody(connection, iter):
             connection.putheader("Transfer-Encoding", "chunked")
             connection.endheaders()
             for chunk in iter:
                 connection.send("%x\r\n%s\r\n" % (len(chunk), chunk))
+                if self.callback:
+                    self.callback(len(chunk))
             connection.send("0\r\n\r\n")
 
         # Do a simple request or a chunked request, depending
