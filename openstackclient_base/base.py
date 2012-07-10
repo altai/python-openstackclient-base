@@ -18,6 +18,8 @@
 """
 Base utilities to build API operation managers and objects on top of.
 """
+import urlparse
+
 from openstackclient_base import exceptions
 
 
@@ -77,21 +79,55 @@ class Manager(object):
         self.api = api
 
     def _list(self, url, response_key, obj_class=None, body=None):
-        resp = None
-        if body:
-            resp, body = self.api.post(url, body=body)
+        parsed_url = urlparse.urlparse(url)
+
+        limited = False
+
+        if parsed_url.query:
+            query = parsed_url.query.split('&')
+            for item in query:
+                if item.startswith("limit"):
+                    limited = True
+                    break
+            else:
+                url += "&limit=1000"
         else:
-            resp, body = self.api.get(url)
+            url += "?limit=1000"
+
+        results = []
+        new_url = url
+
+        while True:
+            resp = None
+            if body:
+                resp, resp_body = self.api.post(new_url, body=body)
+            else:
+                resp, resp_body = self.api.get(new_url)
+
+            data = resp_body[response_key]
+            # NOTE(ja): keystone returns values as list as {'values': [ ... ]}
+            #           unlike other services which just return the list...
+            if type(data) is dict:
+                data = data['values']
+
+            if not data:
+                break
+            if results and results[-1] == data[-1]:
+                break
+
+            results += data
+
+            if limited:
+                break
+
+            try:
+                new_url = "%s&marker=%s" % (url, data[-1]["id"])
+            except KeyError:
+                break
 
         if obj_class is None:
             obj_class = self.resource_class
-
-        data = body[response_key]
-        # NOTE(ja): keystone returns values as list as {'values': [ ... ]}
-        #           unlike other services which just return the list...
-        if type(data) is dict:
-            data = data['values']
-        return [obj_class(self, res, loaded=True) for res in data if res]
+        return [obj_class(self, res, loaded=True) for res in results if res]
 
     def _get(self, url, response_key):
         resp, body = self.api.get(url)
