@@ -68,7 +68,25 @@ def getid(obj):
         return obj
 
 
-class Manager(object):
+class HookableMixin(object):
+    """Mixin so classes can register and run hooks."""
+    _hooks_map = {}
+
+    @classmethod
+    def add_hook(cls, hook_type, hook_func):
+        if hook_type not in cls._hooks_map:
+            cls._hooks_map[hook_type] = []
+
+        cls._hooks_map[hook_type].append(hook_func)
+
+    @classmethod
+    def run_hooks(cls, hook_type, *args, **kwargs):
+        hook_funcs = cls._hooks_map.get(hook_type) or []
+        for hook_func in hook_funcs:
+            hook_func(*args, **kwargs)
+
+
+class Manager(HookableMixin):
     """
     Managers interact with a particular type of API (servers, flavors, images,
     etc.) and provide CRUD operations for them.
