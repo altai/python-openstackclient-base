@@ -96,32 +96,30 @@ class Manager(HookableMixin):
     def __init__(self, api):
         self.api = api
 
-    def _list(self, url, response_key, obj_class=None, body=None):
-        parsed_url = urlparse.urlparse(url)
-
-        limited = False
-
-        if parsed_url.query:
-            query = parsed_url.query.split('&')
-            for item in query:
-                if item.startswith("limit"):
-                    limited = True
-                    break
+    def _list(self, url, response_key, obj_class=None, body=None,
+              iterate=None):
+        if iterate is None:
+            parsed_url = urlparse.urlparse(url)
+            iterate = True
+            if parsed_url.query:
+                query = parsed_url.query.split('&')
+                for item in query:
+                    if item.startswith("limit"):
+                        iterate = False
+                        break
+                else:
+                    url += "&limit=1000"
             else:
-                url += "&limit=1000"
-        else:
-            url += "?limit=1000"
+                url += "?limit=1000"
 
         results = []
         new_url = url
-
         while True:
             resp = None
             if body:
                 resp, resp_body = self.api.post(new_url, body=body)
             else:
                 resp, resp_body = self.api.get(new_url)
-
             data = resp_body[response_key]
             # NOTE(ja): keystone returns values as list as {'values': [ ... ]}
             #           unlike other services which just return the list...
@@ -135,7 +133,7 @@ class Manager(HookableMixin):
 
             results += data
 
-            if limited:
+            if not iterate:
                 break
 
             try:
