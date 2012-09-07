@@ -11,7 +11,8 @@ class Network(base.Resource):
     """
     A network.
     """
-    HUMAN_ID = True
+    HUMAN_ID = False
+    NAME_ATTR = "label"
 
     def __repr__(self):
         return "<Network: %s>" % self.label
