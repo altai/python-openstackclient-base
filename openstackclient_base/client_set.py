@@ -16,6 +16,16 @@
 from openstackclient_base.client import HttpClient
 
 
+def lazyproperty(fn):
+    attr_name = '_lazy_' + fn.__name__
+    @property
+    def _lazyprop(self):
+        if not hasattr(self, attr_name):
+            setattr(self, attr_name, fn(self))
+        return getattr(self, attr_name)
+    return _lazyprop
+
+
 class ClientSet(object):
 
     def __init__(self, **kwargs):
@@ -24,46 +34,46 @@ class ClientSet(object):
         except KeyError:
             self.http_client = HttpClient(**kwargs)
 
-    @property
+    @lazyproperty
     def keystone(self):
         return self.identity_admin
 
-    @property
+    @lazyproperty
     def nova(self):
         return self.compute
 
-    @property
+    @lazyproperty
     def glance(self):
         return self.image
 
-    @property
+    @lazyproperty
     def identity_admin(self):
         from openstackclient_base.keystone.client import IdentityAdminClient
         return IdentityAdminClient(self.http_client)
 
-    @property
+    @lazyproperty
     def identity_public(self):
         from openstackclient_base.keystone.client import IdentityPublicClient
         return IdentityPublicClient(self.http_client)
 
-    @property
+    @lazyproperty
     def compute(self):
         from openstackclient_base.nova.client import ComputeClient
         from openstackclient_base.nova import networks
         from openstackclient_base.nova import fping
         return ComputeClient(self.http_client, extensions=[fping, networks])
 
-    @property
+    @lazyproperty
     def volume(self):
         from openstackclient_base.nova.client import VolumeClient
         return VolumeClient(self.http_client)
 
-    @property
+    @lazyproperty
     def image(self):
         from openstackclient_base.glance.v1.client import ImageClient
         return ImageClient(self.http_client)
 
-    @property
+    @lazyproperty
     def billing(self):
         from openstackclient_base.billing.client import BillingClient
         return BillingClient(self.http_client)
