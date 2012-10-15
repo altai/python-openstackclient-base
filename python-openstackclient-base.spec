@@ -5,9 +5,7 @@
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 %endif
 
-%global os_release essex
-
-Name:             python-openstackclient-base-%{os_release}
+Name:             python-openstackclient-base
 Version:          2012.1
 Release:          1%{?dist}
 Epoch:            1
@@ -25,9 +23,7 @@ BuildRoot:        %{_tmppath}/%{name}-%{version}
 BuildArch:        noarch
 BuildRequires:    python-setuptools
 
-%if 0%{?enable_doc}
-BuildRequires:    python-sphinx make
-%endif
+Obsoletes:        %{name}-essex
 
 %description
 This is a common API client library.
@@ -38,6 +34,7 @@ This is a common API client library.
 Summary:        Documentation for %{name}
 Group:          Documentation
 Requires:       %{name} = %{epoch}:%{version}-%{release}
+BuildRequires:    python-sphinx make
 
 
 %description doc
