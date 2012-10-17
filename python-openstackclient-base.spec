@@ -1,4 +1,4 @@
-%global enable_doc 0
+%global with_doc 0
 %define mod_name openstackclient_base
 
 %if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
@@ -10,7 +10,6 @@ Version:          2012.1
 Release:          1%{?dist}
 Epoch:            1
 Summary:          OpenStack openstack Client
-Provides:         python-openstackclient-base
 
 Group:            Development/Languages
 License:          Apache 2.0
@@ -29,7 +28,7 @@ Obsoletes:        %{name}-essex
 This is a common API client library.
 
 
-%if 0%{?enable_doc}
+%if 0%{?with_doc}
 %package doc
 Summary:        Documentation for %{name}
 Group:          Documentation
@@ -55,7 +54,7 @@ rm -rf %{buildroot}
 
 %{__python} setup.py install -O1 --skip-build --root %{buildroot}
 
-%if 0%{?enable_doc}
+%if 0%{?with_doc}
 make -C docs html PYTHONPATH=%{buildroot}%{python_sitelib}
 %endif
 
@@ -70,7 +69,7 @@ rm -rf %{buildroot}
 %{python_sitelib}/*.egg-info
 
 
-%if 0%{?enable_doc}
+%if 0%{?with_doc}
 %files doc
 %defattr(-,root,root,-)
 %doc docs/_build/html
