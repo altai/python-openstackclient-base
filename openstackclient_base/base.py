@@ -168,7 +168,10 @@ class Manager(HookableMixin):
                                              % method)
         # PUT requests may not return a body
         if body:
-            return self.resource_class(self, body[response_key])
+            if response_key is not None:
+                return self.resource_class(self, body[response_key])
+            else:
+                return body
 
 
 class ManagerWithFind(Manager):
