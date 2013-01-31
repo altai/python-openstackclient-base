@@ -77,3 +77,8 @@ class ClientSet(object):
     def billing(self):
         from openstackclient_base.billing.client import BillingClient
         return BillingClient(self.http_client)
+
+    @lazyproperty
+    def compute_ext(self):
+        from openstackclient_base.compute_ext.client import ComputeExtClient
+        return ComputeExtClient(self.http_client)
