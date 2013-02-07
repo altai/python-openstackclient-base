@@ -1,4 +1,3 @@
-%global with_doc 0
 %define mod_name openstackclient_base
 
 %if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
@@ -28,19 +27,6 @@ Obsoletes:        %{name}-essex
 This is a common API client library.
 
 
-%if 0%{?with_doc}
-%package doc
-Summary:        Documentation for %{name}
-Group:          Documentation
-Requires:       %{name} = %{epoch}:%{version}-%{release}
-BuildRequires:    python-sphinx make
-
-
-%description doc
-Documentation for %{name}.
-%endif
-
-
 %prep
 %setup -q
 
@@ -54,10 +40,6 @@ rm -rf %{buildroot}
 
 %{__python} setup.py install -O1 --skip-build --root %{buildroot}
 
-%if 0%{?with_doc}
-make -C docs html PYTHONPATH=%{buildroot}%{python_sitelib}
-%endif
-
 %clean
 rm -rf %{buildroot}
 
@@ -67,13 +49,6 @@ rm -rf %{buildroot}
 %doc README* LICENSE HACKING*
 %{python_sitelib}/%{mod_name}
 %{python_sitelib}/*.egg-info
-
-
-%if 0%{?with_doc}
-%files doc
-%defattr(-,root,root,-)
-%doc docs/_build/html
-%endif
 
 
 %changelog
