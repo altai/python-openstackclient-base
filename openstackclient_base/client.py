@@ -234,6 +234,11 @@ class HttpClient(object):
         See tests for a sample service catalog.
         """
         catalog = self.access.get("serviceCatalog", [])
+        # NOTE(imelnikov): for unbound tokens, we get no endpoints,
+        #     but we are still able to use public identity service
+        if (not catalog and endpoint_type == 'publicURL'
+                and service_type == 'identity'):
+            return self.auth_uri
         if not region_name:
             region_name = self.region_name
         for service in catalog:

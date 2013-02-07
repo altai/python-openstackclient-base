@@ -49,6 +49,15 @@ def test_glance(filename):
             f.write(chunk)
 
 
+def test_unbound_token(auth):
+    from openstackclient_base.client import HttpClient
+    from openstackclient_base.keystone.client import IdentityPublicClient
+    unbound = HttpClient(username=auth[0],
+                         password=auth[1],
+                         auth_uri=auth[3])
+    print IdentityPublicClient(unbound).tenants.list()
+
+
 def main():
     from openstackclient_base.client import HttpClient
     global http_client
@@ -62,6 +71,8 @@ def main():
         test_keystone()
     elif cmd == "nova":
         test_nova()
+    elif cmd == "unbound":
+        test_unbound_token(auth)
     else:
         test_glance(sys.argv[6])
 
