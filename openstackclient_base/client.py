@@ -248,13 +248,16 @@ class HttpClient(object):
 
         raise exceptions.EndpointNotFound("Endpoint not found.")
 
-    def get_endpoints(self, endpoint_type=None, service_type=None):
+    def get_endpoints(self, endpoint_type=None,
+                      service_type=None, region_name=None):
         """Fetch and filter endpoints for the specified service(s)
 
         Returns endpoints for the specified service (or all) and
         that contain the specified type (or all).
         """
         sc = {}
+        if not region_name:
+            region_name = self.region_name
         for service in self.access.get("serviceCatalog", []):
             if service_type and service_type != service["type"]:
                 continue
