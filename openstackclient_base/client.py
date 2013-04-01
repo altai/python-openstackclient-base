@@ -506,6 +506,14 @@ class BaseClient(object):
         return self.http_client.cs_request(
             self, url, method, **kwargs)
 
+    def raw_request(self, method, url, **kwargs):
+        kwargs.setdefault('read_body', False)
+
+        resp, body = self.cs_request(url, method, **kwargs)
+        if body is None:
+            body = FileReaderIterator(resp)
+        return resp, body
+
     def head(self, url, **kwargs):
         return self.cs_request(url, "HEAD", **kwargs)
 
